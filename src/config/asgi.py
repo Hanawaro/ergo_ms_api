@@ -7,12 +7,24 @@
 """
 
 import os
-
 from django.core.asgi import get_asgi_application
 
-from src.core.utils.auto_api.auto_config import get_env_deploy_type
+os.environ["DJANGO_SETTINGS_MODULE"] = "src.config.settings"
 
-deploy_type = get_env_deploy_type()
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', deploy_type)
+django_asgi_app = get_asgi_application()
 
-application = get_asgi_application()
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
+from django.urls import re_path
+from src.modules.crm.realtime.consumers import TaskCommentsConsumer, NotificationsConsumer
+
+application = ProtocolTypeRouter({
+    "http": django_asgi_app,
+    "websocket": AuthMiddlewareStack(
+        URLRouter([
+            # ws://<host>/api/crm/ws/tasks/<task_id>/comments/
+            re_path(r"^api/crm/ws/tasks/(?P<task_id>\d+)/comments/$", TaskCommentsConsumer.as_asgi()),
+            re_path(r"^api/crm/ws/notifications/(?P<user_id>\d+)$", NotificationsConsumer.as_asgi()),
+        ])
+    ),
+})
